@@ -16,7 +16,6 @@ type alias NeuralNetwork =
     }
 
 
-
 randomize: (NeuralNetwork -> msg ) -> NeuralNetwork -> Cmd msg
 randomize msg n =
     let wih = n.hidden * n.input

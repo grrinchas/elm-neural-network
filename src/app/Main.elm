@@ -1,34 +1,58 @@
 module Main exposing (main)
 
 import Array
+import Canvas
+import Graphics2D exposing (point, size)
 import Html
-import Http
 import Matrix exposing (..)
 import Model exposing (..)
+import Mouse exposing (Button(MainButton))
 import NeuralNetwork exposing (Inputs, NeuralNetwork, Targets, query, train)
 import Random
+import RenderEngine
 import View
-
-
-
-fetch: Cmd Msg
-fetch =
-    Http.send FetchData <| Http.getString
-    "https://raw.githubusercontent.com/makeyourownneuralnetwork/makeyourownneuralnetwork/master/mnist_dataset/mnist_test_10.csv"
 
 
 main: Program Never Model Msg
 main = Html.program
-    { init = (initialModel, fetch)
+    { init = (initialModel, Cmd.batch
+        [ Canvas.initCanvas primaryCanvas
+        , Canvas.initCanvas secondaryCanvas
+        ]
+        )
     , view = View.view
     , update = update
-    , subscriptions = \model -> Sub.none
+    , subscriptions = \model -> Sub.batch
+        [ Canvas.onInitCanvas OnInitPrimaryCanvas
+        , Canvas.onInitCanvas OnInitSecondaryCanvas
+        , Canvas.onGetImageData OnGetCanvasImage
+        ]
     }
 
 update: Msg -> Model -> (Model, Cmd Msg)
 update msg model =
     case msg of
         None -> (model, Cmd.none)
+        OnInitPrimaryCanvas canvas ->
+            ({model| primaryCanvas = canvas}, Cmd.none)
+        OnInitSecondaryCanvas canvas ->
+            ({model| secondaryCanvas = canvas}, Cmd.none)
+        GetCanvasImage ->
+            (model, Canvas.getImageData model.primaryCanvas (point 0 0 ) (size 28 28))
+        OnGetCanvasImage image ->
+            ({model| canvasImages = image::model.canvasImages}, Cmd.none)
+        StartDraw event ->
+            ({model | draw = True}, RenderEngine.render model.primaryCanvas [Graphics2D.moveTo event.offsetPos, Graphics2D.lineWidth 20, Graphics2D.beginPath] )
+        Draw event ->
+            case model.draw of
+                True ->
+                    (model, RenderEngine.render model.primaryCanvas [Graphics2D.lineTo event.offsetPos, Graphics2D.strokePath] )
+                False ->
+                    (model, Cmd.none)
+        FinishDraw event ->
+            ({model | draw = False}, Canvas.copyCanvas model.primaryCanvas model.secondaryCanvas)
+
+        {-
         FetchData data ->
             case data of
                 Err err ->
@@ -39,7 +63,7 @@ update msg model =
                         |> List.map trainData
                         |> (\data -> {model | trainData = Just data, testData = Just data})
                         |> (\model -> (model, NeuralNetwork.randomize RandomizeNetwork model.network ))
-
+        -}
         RandomizeNetwork network ->
             ({model | network = network}, Cmd.none)
 
