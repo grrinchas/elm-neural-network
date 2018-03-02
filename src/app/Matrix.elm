@@ -11,17 +11,24 @@ fromList row list =
 
 
 add: Matrix Float -> Matrix Float -> Matrix Float
-add = zipMatrix (+)
+add = map2 (+)
+
 
 subtract: Matrix Float -> Matrix Float -> Matrix Float
-subtract = zipMatrix (-)
+subtract = map2 (-)
+
 
 multiply: Matrix Float -> Matrix Float -> Matrix Float
-multiply = zipMatrix (*)
+multiply = map2 (*)
 
 
 map: (a -> b) -> Matrix a -> Matrix b
 map f = List.map (List.map f)
+
+
+repeat: Int -> Int -> a -> Matrix a
+repeat row col val = initialize row col (always val)
+
 
 initialize: Int -> Int -> ((Int, Int) -> a) -> Matrix a
 initialize row col f =
@@ -29,7 +36,7 @@ initialize row col f =
 
 
 zero: Int -> Int -> Matrix Float
-zero row col = initialize row col <| always 0
+zero row col = repeat row col 0
 
 
 identity: Int -> Matrix Float
@@ -68,25 +75,31 @@ transpose matrix =
 
 
 
-dot: Matrix Float -> Matrix Float -> Matrix Float
-dot mA mB =  --let _ = Debug.log "" (cols mA == rows mB) in
-    List.map (\x -> List.map (\y -> List.sum <| zipWith (*) x y) (transpose mB)) mA
+dot: Matrix Float -> Matrix Float -> Maybe (Matrix Float)
+dot a b =
+    case cols a == rows b of
+        True ->
+            Just <| List.map (\x -> List.map (\y -> List.sum <| List.map2 (*) x y) (transpose b)) a
+        False ->
+            Nothing
 
 
-zipMatrix: (a -> b -> c) -> Matrix a -> Matrix b -> Matrix c
-zipMatrix f a b =
+unsafeDot: Matrix Float -> Matrix Float -> Matrix Float
+unsafeDot a b =
+    case dot a b of
+        Nothing -> Debug.crash "Columns and rows mismatch between matrices."
+        Just result -> result
+
+
+map2: (a -> b -> c) -> Matrix a -> Matrix b -> Matrix c
+map2 f a b =
     case (a,b) of
         ([], _) -> []
         (_, []) -> []
-        (x::xs, y::ys) -> zipWith f x y :: zipMatrix f xs ys
+        (x::xs, y::ys) -> List.map2 f x y :: map2 f xs ys
 
-
-zipWith: (a -> b -> c) -> List a -> List b -> List c
-zipWith f a b =
-    case (a,b) of
-        ([], _) -> []
-        (_, []) -> []
-        (x::xs, y::ys) -> f x y :: zipWith f xs ys
 
 flatten: Matrix a -> List a
 flatten = List.concat
+
+

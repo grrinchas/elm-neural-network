@@ -1,31 +1,15 @@
 module Main exposing (main)
 
 import Array
-import Html exposing (Html, div, h1, p, text)
+import Html
 import Http
 import Matrix exposing (..)
+import Model exposing (..)
+import NeuralNetwork exposing (Inputs, NeuralNetwork, Targets, query, train)
 import Random
-
-type Msg
-    = None
-    | GenerateWeights (Matrix Float, Matrix Float)
-    | FetchData (Result Http.Error String)
+import View
 
 
-
-type alias NeuralNetwork =
-    { input: Int
-    , output: Int
-    , hidden: Int
-    , learningRate: Float
-    , wih: Matrix Float
-    , woh: Matrix Float
-    }
-
-type alias Model =
-    { network: NeuralNetwork
-    , trainData: Maybe (List (List Float, List Float))
-    }
 
 fetch: Cmd Msg
 fetch =
@@ -33,102 +17,13 @@ fetch =
     "https://raw.githubusercontent.com/makeyourownneuralnetwork/makeyourownneuralnetwork/master/mnist_dataset/mnist_test_10.csv"
 
 
-
-sigmoid: Float -> Float
-sigmoid x = 1 / (1 + e^(-x))
-
-
-hiddenInputs: List Float -> NeuralNetwork -> Matrix Float
-hiddenInputs inp network =
-        Matrix.dot network.wih (Matrix.colMatrix inp)
-
-
-hiddenOutputs: List Float -> NeuralNetwork -> Matrix Float
-hiddenOutputs inp network =
-    hiddenInputs inp network |> Matrix.map sigmoid
-
-
-finalInputs: List Float -> NeuralNetwork -> Matrix Float
-finalInputs inp network =
-    hiddenOutputs inp network |> Matrix.dot network.woh
-
-
-finalOutputs: List Float -> NeuralNetwork -> Matrix Float
-finalOutputs inp network =
-    finalInputs inp network |> Matrix.map sigmoid
-
-
-train: List Float -> List Float -> NeuralNetwork -> NeuralNetwork
-train inp targets network =
-    { input = network.input
-    , output = network.output
-    , hidden = network.hidden
-    , learningRate = network.learningRate
-    , woh =
-        let outputs = finalOutputs inp network in
-        Matrix.map (\x -> 1 - x) outputs
-            |> Matrix.multiply outputs
-            |> Matrix.multiply (Matrix.subtract (Matrix.colMatrix targets) outputs)
-            |> (\x -> hiddenOutputs inp network |> Matrix.transpose |> Matrix.dot x)
-            |> Matrix.map ((*) network.learningRate)
-            |> Matrix.add network.woh
-    , wih =
-        let outputs = hiddenOutputs inp network in
-        Matrix.map (\x -> 1 - x) outputs
-            |> Matrix.multiply outputs
-            |> Matrix.multiply (Matrix.dot (Matrix.transpose network.woh) (Matrix.subtract (Matrix.colMatrix targets) (finalOutputs inp network)))
-            |> (\x -> Matrix.colMatrix inp |> Matrix.transpose |> Matrix.dot x)
-            |> Matrix.map ((*) network.learningRate)
-            |> Matrix.add network.wih
-    }
-
-
-
-
-initialNetwork: NeuralNetwork
-initialNetwork =
-    { input = 784
-    , output = 10
-    , hidden = 200
-    , learningRate = 0.4
-    , wih = []
-    , woh = []
-    }
-
-
-
-
-
-initialModel: Model
-initialModel =
-    { network = initialNetwork
-    , trainData = Nothing
-    }
-
-gaussian: Float -> Float -> Float -> Float
-gaussian mean deviation x =
-    (e^(-((x - mean)^2)/(2 * deviation ^ 2)))/(sqrt (2 * pi * deviation ^ 2))
-
-
 main: Program Never Model Msg
 main = Html.program
-    { init =
-        ( initialModel
-        , Cmd.batch [Random.float -0.5 0.5
-            |> Random.list (initialModel.network.input * initialModel.network.hidden + initialModel.network.hidden * initialModel.network.output)
-            |> Random.map (\l -> (
-                Matrix.fromList initialModel.network.input <|
-                List.take (initialModel.network.input * initialModel.network.hidden) l
-                , Matrix.fromList initialModel.network.hidden <| List.drop (initialModel.network.input * initialModel.network.hidden) l))
-            |> Random.generate GenerateWeights
-            , fetch
-            ]
-        )
-    , view = view
+    { init = (initialModel, fetch)
+    , view = View.view
     , update = update
     , subscriptions = \model -> Sub.none
     }
-
 
 update: Msg -> Model -> (Model, Cmd Msg)
 update msg model =
@@ -136,33 +31,30 @@ update msg model =
         None -> (model, Cmd.none)
         FetchData data ->
             case data of
-                Err err -> (model, Cmd.none)
+                Err err ->
+                    (model, Cmd.none)
                 Ok result ->
-                    let train = List.map trainData <| List.filter (not << String.isEmpty) <| String.lines result in
-            ({model| trainData = Just train }, Cmd.none)
+                    String.lines result
+                        |> List.filter (not << String.isEmpty)
+                        |> List.map trainData
+                        |> (\data -> {model | trainData = Just data, testData = Just data})
+                        |> (\model -> (model, NeuralNetwork.randomize RandomizeNetwork model.network ))
 
-        GenerateWeights (wih, woh) ->
-            case model.network of
-                network ->
-                    ({model | network = {network | wih = wih, woh = woh}}, Cmd.none)
+        RandomizeNetwork network ->
+            ({model | network = network}, Cmd.none)
+
+        StartTraining ->
+            startTraining model
+                |> (\m -> (m,Cmd.none))
 
 
+startTraining: Model -> Model
+startTraining model =
+    case model.trainData of
+        Nothing -> model
+        Just data ->
+            {model| network = List.foldr train model.network data}
 
-view: Model -> Html Msg
-view model =
-    div []
-        [ text <| toString <| dot [[1,2,3],[4,5,6]] [[7,8],[9,10],[11,12]]
-         , case model.trainData of
-             Nothing ->
-                 p [] [text "loading data"]
-             Just data ->
-                 div []
-                    [ p [] [text <| toString <|toNumber <| flatten <| finalOutputs (Tuple.second <| trainData two) (trainMany data model.network)]
-                    , p [] [text <| toString <|toNumber <| flatten <| finalOutputs (Tuple.second <| trainData seven) (trainMany data model.network)]
-                    , p [] [text <| toString <|toNumber <| flatten <| finalOutputs (Tuple.second <| trainData five) (trainMany data model.network)]
-                    ]
-
-         ]
 
 toNumber: List Float -> Int
 toNumber list =
@@ -174,14 +66,6 @@ toNumber list =
         |> Tuple.first
 
 
-
-
-
-trainMany: List (List Float, List Float) -> NeuralNetwork ->  NeuralNetwork
-trainMany data network =
-   -- train (Tuple.second <| trainData two) (Tuple.first <| trainData two) network
-    List.foldr (\(x,y) net -> train y x net) network data
-        --|> (\n -> List.foldr (\(x,y) net -> train y x net) n data)
 
 target: Int -> List Float
 target i =
@@ -207,6 +91,5 @@ trainData data =
         |> List.map String.toInt
         |> List.map (Result.withDefault -1)
         |> (\x -> (List.head x |> Maybe.withDefault -1, List.tail x |> Maybe.withDefault [] ))
-       -- |> (\(x,m) -> (x, List.map toFloat m))
         |> (\(x, m) -> (target x, List.map (\x -> toFloat x / 255.0 * 0.99 |> (+) 0.01) m))
 
