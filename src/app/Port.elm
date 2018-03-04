@@ -13,6 +13,5 @@ port render: Json.Encode.Value -> Cmd msg
 
 port getImageData: {id: String, x: Float, y: Float, width: Float, height: Float} -> Cmd msg
 
-port onGetImageData: (List Int -> msg) -> Sub msg
+port onGetImageData: ({url: String, data: List Int} -> msg) -> Sub msg
 
-port copyCanvas: {source: String, destination: String} -> Cmd msg

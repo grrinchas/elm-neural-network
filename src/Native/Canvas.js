@@ -1,4 +1,3 @@
-
 const canvases = [];
 
 export function initCanvas(app, port) {
@@ -39,13 +38,6 @@ function loadAssets(app, assets, port, canvas) {
 }
 
 
-export function copyCanvas(input, app) {
-    const destination = canvases.find(c => c.id === input.destination).container;
-    const context = destination.getContext('2d');
-    const source = canvases.find(c => c.id === input.source).container;
-    context.drawImage(source, 0,0, destination.width, destination.height);
-}
-
 export function render(stage) {
     const context = canvases.find(c => c.id === stage.id).container.getContext('2d');
     stage.operations.forEach(op => {
@@ -53,10 +45,19 @@ export function render(stage) {
     });
 }
 
+
 export function getImageData(input, app) {
-    const context = canvases.find(c => c.id === input.id).container.getContext('2d');
+    const source = canvases.find(c => c.id === input.id).container;
+    const destination = document.createElement('canvas');
+    destination.width = input.width;
+    destination.height = input.height;
+
+    const context = destination.getContext('2d');
+    context.drawImage(source, input.x, input.y, destination.width, destination.height);
+
     const imageData = context.getImageData(input.x, input.y, input.width, input.height);
-    app.ports.onGetImageData.send(Array.from(imageData.data));
+    app.ports.onGetImageData.send({url: destination.toDataURL("image/png"), data: Array.from(imageData.data)});
+
 }
 
 

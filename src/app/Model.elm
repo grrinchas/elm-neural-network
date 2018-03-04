@@ -1,36 +1,41 @@
 module Model exposing (..)
 
 import Canvas exposing (Canvas)
+import Element.Input exposing (SelectMsg)
 import Graphics2D exposing (size)
 import Http
 import Mouse exposing (Event)
 import NeuralNetwork exposing (Inputs, NeuralNetwork, Targets)
 
 
+type alias Symbol = String
+
+type alias TrainData =
+    { inputs: List Float
+    , targets: List Float
+    , url: String
+    , name: String
+    }
+
 type Msg
     = None
     | OnInitPrimaryCanvas Canvas
-    | OnInitSecondaryCanvas Canvas
-    | OnGetCanvasImage (List Int)
-    | GetCanvasImage
+    | OnGetCanvasImage {url: String, data: List Int}
+    | OnTargetChange String
     | StartDraw Event
     | Draw Event
     | FinishDraw Event
 
     | RandomizeNetwork NeuralNetwork
     | StartTraining
+    | GuessSymbol
+    | AddTrainingData
+    | OnShuffleTrainData (List TrainData)
+    | ShuffleTrainData
+    | ClickTrainData String
+    | RemoveTrainData
+    | ClearCanvas
 
-
-type alias Model =
-    { primaryCanvas: Canvas
-    , secondaryCanvas: Canvas
-    , network: NeuralNetwork
-    , canvasImages: List (List Int)
-    , draw: Bool
-    , trainData: Maybe (List (Targets, Inputs))
-    , testData: Maybe (List (Targets, Inputs))
-    , testResults: List String
-    }
 
 
 initialNetwork: NeuralNetwork
@@ -38,7 +43,7 @@ initialNetwork =
     { input = 784
     , output = 10
     , hidden = 200
-    , learningRate = 0.4
+    , learningRate = 0.2
     , wih = []
     , woh = []
     }
@@ -58,15 +63,26 @@ secondaryCanvas =
     , assets = []
     }
 
+type alias Model =
+    { primaryCanvas: Canvas
+    , network: NeuralNetwork
+    , draw: Bool
+    , target: String
+    , trainData: List TrainData
+    , imageData: {url:String, data: List Float}
+    , guess: String
+    , selectionTrainData: List String
+    }
+
 initialModel: Model
 initialModel =
     { primaryCanvas = primaryCanvas
-    , secondaryCanvas = secondaryCanvas
-    , canvasImages = []
     , draw = False
     , network = initialNetwork
-    , trainData = Nothing
-    , testData = Nothing
-    , testResults = []
+    , trainData = []
+    , imageData = {url = "", data = List.repeat 784 0.01}
+    , target = ""
+    , guess = ""
+    , selectionTrainData = []
     }
 
