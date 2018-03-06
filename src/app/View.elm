@@ -68,6 +68,10 @@ bgColor s =
 fgColor: Styles -> Property class variation
 fgColor s =
     case s of
+        WarningLabel ->
+            Style.Color.text <| color SecondaryColor
+        WarningText ->
+            Style.Color.text <| color SecondaryColor
         LabelStyle ->
             Style.Color.text <| Color.Manipulate.lighten 0.5 (color BlackColor)
         TargetInputStyle ->
@@ -105,10 +109,7 @@ fontSize s =
         HeaderStyle -> Font.size 35
         NeuralNetworkHeadline -> Font.size 35
         H1 -> Font.size 35
-        LabelStyle -> Font.size 18
-        Paragraph -> Font.size 18
         Button _ -> Font.size 16
-        TextStyle -> Font.size 18
         _ -> Font.size 18
 
 type ButtonStyle
@@ -130,7 +131,9 @@ type Styles
     | Link
     | Button ButtonStyle
     | LabelStyle
+    | WarningLabel
     | TextStyle
+    | WarningText
 
 stylesheet: StyleSheet Styles var
 stylesheet =
@@ -224,10 +227,19 @@ stylesheet =
             [ fontSize TextStyle
             , fgColor TextStyle
             ]
+        , style WarningText
+            [ fontSize WarningText
+            , fgColor WarningText
+            ]
         , style LabelStyle
             [ fgColor LabelStyle
             , Font.bold
             , fontSize LabelStyle
+            ]
+        , style WarningLabel
+            [ fgColor WarningLabel
+            , Font.bold
+            , fontSize WarningLabel
             ]
         ]
 
@@ -252,11 +264,16 @@ view model = layout stylesheet <|
         , column ControlPanel [width fill, center, paddingXY 0 20]
             [ row NoneStyle [width <| px containerWidth, spread]
                 [ row NoneStyle [spacing 10]
-                    [ case List.isEmpty model.trainData  of
-                        True ->
+                    [ case (List.isEmpty model.trainData, model.learningRate, model.hidden)  of
+                        (False, Just lr, Just h) ->
+                            case (lr < 0.01 || lr > 0.99, h < 1) of
+                                (False, False) ->
+                                    button (Button TrainButton) [width <| px 100, paddingXY 10 7, Mouse.onClick <| always StartTraining] (text ("Train (" ++ toString model.epochs ++ ")"))
+                                _ ->
+                                    el (Button DisabledButton) [width <| px 100, paddingXY 10 7 ] (text ("Train (" ++ toString model.epochs ++ ")"))
+                        _ ->
                             el (Button DisabledButton) [width <| px 100, paddingXY 10 7 ] (text ("Train (" ++ toString model.epochs ++ ")"))
-                        False ->
-                            button (Button TrainButton) [width <| px 100, paddingXY 10 7, Mouse.onClick <| always StartTraining] (text ("Train (" ++ toString model.epochs ++ ")"))
+
                     , case model.epochs == 0 of
                         True ->
                             el (Button DisabledButton) [width <| px 100, paddingXY 10 7 ] (text "Guess")
@@ -289,14 +306,14 @@ view model = layout stylesheet <|
                 [ column NoneStyle [width <| px model.primaryCanvas.size.width]
                     [ row NoneStyle [paddingBottom 20]
                         [ Element.Input.text TargetInputStyle [height <| px 20, width <| px 40,attribute "maxlength" "4"]
-                            { onChange = always None
-                            , value = toString model.network.hidden
+                            { onChange = \h -> OnHiddenChange <| Result.toMaybe <| String.toInt h
+                            , value = Maybe.map toString model.hidden |> Maybe.withDefault ""
                             , label = Element.Input.labelLeft <|  h2 LabelStyle [] <| text "Hidden: "
                             , options = []
                             }
                         , Element.Input.text TargetInputStyle [height <| px 20, width <| px 37,attribute "maxlength" "4", moveLeft 70]
-                            { onChange = always None
-                            , value = toString model.network.learningRate
+                            { onChange = \lr -> OnLearningRateChange <|  Result.toMaybe <| String.toFloat lr
+                            , value = Maybe.map toString model.learningRate |> Maybe.withDefault ""
                             , label = Element.Input.labelLeft <|  h2 LabelStyle [moveLeft 70] <| text "LR: "
                             , options = []
                             }
@@ -312,17 +329,43 @@ view model = layout stylesheet <|
                             , Html.Attributes.width <| round model.primaryCanvas.size.width
                             , Html.Attributes.height <| round model.primaryCanvas.size.height
                             ] []
-                   , row NoneStyle [paddingTop 20]
-                    [ h2 LabelStyle [] (text "Results: ")
-                    , wrappedRow NoneStyle [width <| px containerWidth, alignLeft] <|
-                       List.map (\(name, guess) -> el NoneStyle [alignLeft] <| text (name ++ ": " ++ guess ++ "%, ")) (toNumber model)
-                    ]
+                   , row NoneStyle [paddingTop 20] <|
+                     case (model.learningRate, model.hidden, String.isEmpty model.target) of
+                        (Nothing, _,_) ->
+                            [ h2 WarningLabel [] (text "Warning: ")
+                            , el WarningText [] <| text "Learning rate must be decimal number between 0.01 and 0.99."
+                            ]
+                        (_, Nothing,_) ->
+                            [ h2 WarningLabel [] (text "Warning: ")
+                            , el WarningText [] <| text "Hidden layer must be a number between 1 and 9999."
+                            ]
+                        (_, _, True) ->
+                            [ h2 WarningLabel [] (text "Warning: ")
+                            , el WarningText [] <| text "Name is missing."
+                            ]
+                        (Just lr, Just h, _) ->
+                            case (lr < 0.01 || lr > 0.99, h < 1) of
+                                (True, _) ->
+                                    [ h2 WarningLabel [] (text "Warning: ")
+                                    , el WarningText [] <| text "Learning rate must be decimal number between 0.01 and 0.99."
+                                    ]
+                                (_, True ) ->
+                                    [ h2 WarningLabel [] (text "Warning: ")
+                                    , el WarningText [] <| text "Hidden layer must be a number between 1 and 9999."
+                                    ]
+                                (False, False) ->
+                                    [ h2 LabelStyle [] (text "Results: ")
+                                    , el TextStyle [width <| px containerWidth, alignLeft]
+                                        ( toNumber model |> List.map (\(name, guess) -> "(" ++ name ++ ": " ++ guess ++"%)") |> String.join " " |> text )
+                                    ]
+
+
                 ]
                 , column NoneStyle []
                     [ row NoneStyle []
                         [ Element.Input.text TargetInputStyle [height <| px 20, width <| px 90, attribute "maxlength" "10"]
                             { onChange = OnTargetChange
-                            , value = ""
+                            , value = model.target
                             , label = Element.Input.labelLeft <| h2 LabelStyle [] <| text "Name: "
                             , options = []
                             }
@@ -352,27 +395,28 @@ view model = layout stylesheet <|
                     ]
                 ]
             ]
+
            , column NoneStyle [width fill, center]
                [ column NoneStyle [width <| px 800]
                    [ h1  H1 [paddingTop 60, paddingBottom 20] (text "What is it?")
                    , paragraph Paragraph []
-                       [ text <| "It is an experimental application to test pattern recognition with neural network written entirely in "
+                       [ text <| "It is an experimental application to test pattern recognition with neural network. Written entirely in "
                        , link "http://elm-lang.org/" <| el Link [] (text "Elm")
-                       , text <| " programming language. "
+                       , text <| " language. "
                        , text <| "It allows to create your own training set for various patterns, train neural network "
                        , text <| "to recognise them, and lastly test it."
                        ]
                    , h1  H1 [paddingTop 60, paddingBottom 20] (text "How to use it?")
                    , paragraph Paragraph []
-                        [ text <| ""
+                        [ text <| "First create training set by drawing bunch of symbols on the canvas and give a name "
+                        , text <| "for each symbol. Then click on"
                         ]
                    , h1  H1 [paddingTop 60, paddingBottom 20] (text "How does it work?")
                    , text ("")
+                    , text ("lr: " ++ toString model.network.learningRate ++ " output: " ++ toString model.network.output ++ " hidden: " ++ toString model.network.hidden)
                    ]
                ]
         ]
-
-
 
 
 toNumber: Model -> List (String, String)

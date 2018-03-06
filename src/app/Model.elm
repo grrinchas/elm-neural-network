@@ -22,8 +22,8 @@ type Msg
     | OnInitPrimaryCanvas Canvas
     | OnGetCanvasImage {url: String, data: List Int}
     | OnTargetChange String
-    | OnLearningRateChange Float
-    | OnHiddenChange Int
+    | OnLearningRateChange (Maybe Float)
+    | OnHiddenChange (Maybe Int)
     | StartDraw Event
     | Draw Event
     | FinishDraw Event
@@ -66,6 +66,8 @@ type alias Model =
     , network: NeuralNetwork
     , draw: Bool
     , target: String
+    , learningRate: Maybe Float
+    , hidden: Maybe Int
     , trainData: List TrainData
     , imageData: {url:String, data: List Float}
     , guess: List Float
@@ -81,7 +83,9 @@ initialModel =
     , network = initialNetwork
     , trainData = []
     , imageData = {url = "", data = List.repeat 784 0.01}
-    , target = ""
+    , target = "Unknown"
+    , learningRate = Just <| initialNetwork.learningRate
+    , hidden = Just <| initialNetwork.hidden
     , guess = []
     , selectionTrainData = []
     , epochs = 0

@@ -8,12 +8,10 @@ import List.Extra
 import List.Split
 import Matrix exposing (..)
 import Model exposing (..)
-import Mouse exposing (Button(MainButton))
 import NeuralNetwork exposing (Inputs, NeuralNetwork, Targets, query, train)
 import Random
 import Random.List
 import RenderEngine
-import Task
 import View
 
 
@@ -32,23 +30,20 @@ main = Html.program
     }
 
 
-
 update: Msg -> Model -> (Model, Cmd Msg)
 update msg model =
     case msg of
         None ->
-            (model, Cmd.none)
+            ( model, Cmd.none)
 
         OnInitPrimaryCanvas canvas ->
-            ({model| primaryCanvas = canvas}, Cmd.none)
+            ({ model | primaryCanvas = canvas}, Cmd.none)
         OnTargetChange target ->
-            ({model| target = target}, Cmd.none)
+            ({ model | target = target}, Cmd.none)
         OnLearningRateChange rate ->
-            case model.network of
-                network -> ({model| network = {network | learningRate = rate}}, Cmd.none)
+            ({ model | learningRate = rate}, Cmd.none)
         OnHiddenChange hidden ->
-            case model.network of
-                network -> ({model| network = {network | hidden = hidden}}, Cmd.none)
+            ({ model | hidden = hidden}, Cmd.none)
         OnGetCanvasImage {url, data} ->
             List.Split.chunksOfLeft 4 data
                 |> List.map List.sum
@@ -84,13 +79,21 @@ update msg model =
                             |> List.Extra.find (\(name, target) -> data.name == name)
                             |> Maybe.withDefault ("", [])
                             |> Tuple.second
-                newTrainData = List.map (\data -> {data | targets = findTargets data}) model.trainData
-                network = model.network
+                oldNetwork = model.network
+                newModel =
+                    { model | network =
+                        { oldNetwork
+                            | learningRate = Maybe.withDefault initialNetwork.learningRate model.learningRate
+                            , output = if model.epochs == 0 then List.length targets else oldNetwork.output
+                            , hidden = Maybe.withDefault initialNetwork.hidden model.hidden
+                        }
+                        , trainData = List.map (\data -> {data | targets = findTargets data}) model.trainData
+                    }
             in case (model.epochs == 0) of
                    True ->
-                       ({ model | trainData = newTrainData}, NeuralNetwork.randomize RandomizeNetwork { network | output = List.length targets})
+                       (newModel, NeuralNetwork.randomize RandomizeNetwork newModel.network)
                    False ->
-                       (trainNetwork { model | trainData = newTrainData}, Cmd.none)
+                       (trainNetwork newModel, Cmd.none)
 
         GuessSymbol ->
             ({ model | guess = Matrix.flatten <| NeuralNetwork.query model.imageData.data model.network}, clearCanvas model)
@@ -122,7 +125,13 @@ update msg model =
             (model, clearCanvas model )
 
         ResetNetwork ->
-            ({model | network = initialNetwork, epochs = 0, guess = []}, Cmd.none )
+            ({model
+                | network = initialNetwork
+                , epochs = 0
+                , guess = []
+                , learningRate = initialModel.learningRate
+                , hidden = initialModel.hidden
+                }, Cmd.none )
 
 
 trainNetwork: Model -> Model
