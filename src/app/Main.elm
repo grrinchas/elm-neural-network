@@ -13,6 +13,7 @@ import NeuralNetwork exposing (Inputs, NeuralNetwork, Targets, query, train)
 import Random
 import Random.List
 import RenderEngine
+import Task
 import View
 
 
@@ -20,7 +21,6 @@ main: Program Never Model Msg
 main = Html.program
     { init = (initialModel, Cmd.batch
         [ Canvas.initCanvas primaryCanvas
-        , NeuralNetwork.randomize RandomizeNetwork initialNetwork
         ]
         )
     , view = View.view
@@ -43,6 +43,12 @@ update msg model =
             ({model| primaryCanvas = canvas}, Cmd.none)
         OnTargetChange target ->
             ({model| target = target}, Cmd.none)
+        OnLearningRateChange rate ->
+            case model.network of
+                network -> ({model| network = {network | learningRate = rate}}, Cmd.none)
+        OnHiddenChange hidden ->
+            case model.network of
+                network -> ({model| network = {network | hidden = hidden}}, Cmd.none)
         OnGetCanvasImage {url, data} ->
             List.Split.chunksOfLeft 4 data
                 |> List.map List.sum
@@ -58,23 +64,36 @@ update msg model =
                     (model, Cmd.none)
         FinishDraw event ->
             ({model | draw = False}, Canvas.getImageData model.primaryCanvas (point 0 0) (size 28 28))
-
         RandomizeNetwork network ->
-            ({model | network = network}, Cmd.none)
+            { model | network = network }
+                |> (\m -> (trainNetwork m, Cmd.none))
 
         OnShuffleTrainData data ->
             ({model | trainData = data}, Cmd.none)
 
         StartTraining ->
-            ({model| network = List.foldr train model.network (List.map (\{inputs, targets, name, url} -> (targets,inputs)) model.trainData)}, Cmd.none)
+            let targets =
+                    List.map .name model.trainData
+                        |> List.sort
+                        |> List.Extra.unique
+                        |> Array.fromList
+                        |> Array.toIndexedList
+                findTargets =
+                    \data ->
+                        List.map (\(i, name) -> (name, target (List.length targets) i)) targets
+                            |> List.Extra.find (\(name, target) -> data.name == name)
+                            |> Maybe.withDefault ("", [])
+                            |> Tuple.second
+                newTrainData = List.map (\data -> {data | targets = findTargets data}) model.trainData
+                network = model.network
+            in case (model.epochs == 0) of
+                   True ->
+                       ({ model | trainData = newTrainData}, NeuralNetwork.randomize RandomizeNetwork { network | output = List.length targets})
+                   False ->
+                       (trainNetwork { model | trainData = newTrainData}, Cmd.none)
 
         GuessSymbol ->
-            ({ model | guess = toString <| NeuralNetwork.query model.imageData.data model.network}
-            , Cmd.batch
-                [ RenderEngine.render model.primaryCanvas [Graphics2D.clearRect (point 0 0) model.primaryCanvas.size]
-                , Canvas.getImageData model.primaryCanvas (point 0 0) (size 28 28)
-                ]
-            )
+            ({ model | guess = Matrix.flatten <| NeuralNetwork.query model.imageData.data model.network}, clearCanvas model)
 
         ShuffleTrainData ->
             (model, Random.List.shuffle model.trainData |> Random.generate OnShuffleTrainData)
@@ -91,32 +110,37 @@ update msg model =
                 |> (\t -> {model | trainData = t})
                 |> (\m -> ({m | selectionTrainData = []}, Cmd.none))
 
+        RemoveAllTrainData ->
+            ({model | selectionTrainData = [], trainData = []}, Cmd.none)
+
         AddTrainingData ->
-            String.toInt model.target
-                |> Result.withDefault 0
-                |> target
-                |> (\(name,list) ->
-                    {inputs = model.imageData.data, targets = list, url = model.imageData.url, name = name}
-                        |> flip (::) model.trainData
-                   )
-                |> (\data -> {model| trainData = data})
-                |> (\m ->
-                    (m, Cmd.batch
-                        [ RenderEngine.render model.primaryCanvas [Graphics2D.clearRect (point 0 0) model.primaryCanvas.size]
-                        , Canvas.getImageData model.primaryCanvas (point 0 0) (size 28 28)
-                        ]
-                    ))
+            {inputs = model.imageData.data, targets = [], url = model.imageData.url, name = model.target}
+                |> flip (::) model.trainData
+                |> (\data -> ({model | trainData = data}, clearCanvas model))
+
         ClearCanvas ->
-             (model, Cmd.batch
-                 [ RenderEngine.render model.primaryCanvas [Graphics2D.clearRect (point 0 0) model.primaryCanvas.size]
-                 , Canvas.getImageData model.primaryCanvas (point 0 0) (size 28 28)
-                 ]
-             )
+            (model, clearCanvas model )
+
+        ResetNetwork ->
+            ({model | network = initialNetwork, epochs = 0, guess = []}, Cmd.none )
 
 
-target: Int -> (String, List Float)
-target i =
-    Array.repeat 10 0.01
+trainNetwork: Model -> Model
+trainNetwork model =
+    List.map (\data -> (data.targets, data.inputs)) model.trainData
+        |> List.foldr train model.network
+        |> (\network -> {model | network = network, epochs = model.epochs + 1})
+
+
+clearCanvas: Model -> Cmd msg
+clearCanvas model = Cmd.batch
+     [ RenderEngine.render model.primaryCanvas [Graphics2D.clearRect (point 0 0) model.primaryCanvas.size]
+     , Canvas.getImageData model.primaryCanvas (point 0 0) (size 28 28)
+     ]
+
+
+target: Int -> Int -> (List Float)
+target total i =
+    Array.repeat total 0.01
         |> Array.set i 0.99
         |> Array.toList
-        |> (\l -> (toString i, l))

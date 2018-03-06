@@ -22,6 +22,8 @@ type Msg
     | OnInitPrimaryCanvas Canvas
     | OnGetCanvasImage {url: String, data: List Int}
     | OnTargetChange String
+    | OnLearningRateChange Float
+    | OnHiddenChange Int
     | StartDraw Event
     | Draw Event
     | FinishDraw Event
@@ -34,14 +36,16 @@ type Msg
     | ShuffleTrainData
     | ClickTrainData String
     | RemoveTrainData
+    | RemoveAllTrainData
     | ClearCanvas
+    | ResetNetwork
 
 
 
 initialNetwork: NeuralNetwork
 initialNetwork =
     { input = 784
-    , output = 10
+    , output = 0
     , hidden = 200
     , learningRate = 0.2
     , wih = []
@@ -56,12 +60,6 @@ primaryCanvas =
     , assets = []
     }
 
-secondaryCanvas: Canvas
-secondaryCanvas =
-    { id = "secondaryCanvas"
-    , size = size 28 28
-    , assets = []
-    }
 
 type alias Model =
     { primaryCanvas: Canvas
@@ -70,8 +68,10 @@ type alias Model =
     , target: String
     , trainData: List TrainData
     , imageData: {url:String, data: List Float}
-    , guess: String
+    , guess: List Float
     , selectionTrainData: List String
+    , epochs: Int
+    , trainingStatus: Bool
     }
 
 initialModel: Model
@@ -82,7 +82,9 @@ initialModel =
     , trainData = []
     , imageData = {url = "", data = List.repeat 784 0.01}
     , target = ""
-    , guess = ""
+    , guess = []
     , selectionTrainData = []
+    , epochs = 0
+    , trainingStatus = False
     }
 
