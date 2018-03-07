@@ -45,6 +45,8 @@ color c =
 bgColor: Styles -> Property class variation
 bgColor s =
     case s of
+        Footer ->
+            background <| Color.Manipulate.lighten 0.1 (color BlackColor)
         CanvasStyle ->
             background <| color WhiteColor
         SelectedTrainData ->
@@ -68,6 +70,8 @@ bgColor s =
 fgColor: Styles -> Property class variation
 fgColor s =
     case s of
+        Footer ->
+            Style.Color.text <| Color.Manipulate.lighten 0.5 (color BlackColor)
         WarningLabel ->
             Style.Color.text <| color SecondaryColor
         WarningText ->
@@ -134,6 +138,7 @@ type Styles
     | WarningLabel
     | TextStyle
     | WarningText
+    | Footer
 
 stylesheet: StyleSheet Styles var
 stylesheet =
@@ -241,6 +246,14 @@ stylesheet =
             , Font.bold
             , fontSize WarningLabel
             ]
+        , style Footer
+            [ fgColor Footer
+            , bgColor Footer
+            , Font.uppercase
+            , Font.light
+            , Font.letterSpacing 1
+            , Font.size 13
+            ]
         ]
 
 
@@ -257,7 +270,7 @@ view model = layout stylesheet <|
                 ]
             ,
             row NoneStyle []
-                [ text "any pattern."
+                [ text "patterns."
                 ]
             ]
 
@@ -396,8 +409,8 @@ view model = layout stylesheet <|
                 ]
             ]
 
-           , column NoneStyle [width fill, center]
-               [ column NoneStyle [width <| px 800]
+           , column NoneStyle [width fill, center, paddingBottom 60]
+               [ column NoneStyle [width <| px 700]
                    [ h1  H1 [paddingTop 60, paddingBottom 20] (text "What is it?")
                    , paragraph Paragraph []
                        [ text <| "It is an experimental application to test pattern recognition with neural network. Written entirely in "
@@ -409,13 +422,31 @@ view model = layout stylesheet <|
                    , h1  H1 [paddingTop 60, paddingBottom 20] (text "How to use it?")
                    , paragraph Paragraph []
                         [ text <| "First create training set by drawing bunch of symbols on the canvas and give a name "
-                        , text <| "for each symbol. Then click on"
+                        , text <| "to each of them. Then click "
+                        , bold <| "train "
+                        , text <| "which will adjust weigths in neural network to recognise symbols from the training set. "
+                        , text <| "After that draw a symbol and click "
+                        , bold <| "guess"
+                        , text <| ". Neural network will try to \"guess\" which symbol from the training set have been drawn. "
+                        , text <| "For better results, you may wish to create more than one pattern for each symbol and "
+                        , text <| "run train few times, while shuffling training set. "
+                        , text <| "You can also tweak neural network by changing learning rate ("
+                        , bold <| "LR"
+                        , text <| ") and count of neurons in the "
+                        , bold <| "hidden "
+                        , text <| "layer."
                         ]
-                   , h1  H1 [paddingTop 60, paddingBottom 20] (text "How does it work?")
-                   , text ("")
-                    , text ("lr: " ++ toString model.network.learningRate ++ " output: " ++ toString model.network.output ++ " hidden: " ++ toString model.network.hidden)
+                  -- ,  h1  H1 [paddingTop 60, paddingBottom 20] (text "How does it work?")
+                   , paragraph Paragraph []
+                        [
+                        ]
                    ]
                ]
+            , column Footer [width fill, center]
+              [ column NoneStyle [width <| px 800, center, paddingXY 0 40 ]
+                    [ el NoneStyle [verticalCenter] (text "© 2018 Dainius Grinciukas. All rights reserved.")
+                    ]
+              ]
         ]
 
 
